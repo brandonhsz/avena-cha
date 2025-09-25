@@ -2,72 +2,23 @@
 
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { GitHubUrlSchema } from '@/app/lib/schemas';
-import { useAppDispatch, useAppSelector } from '@/app/lib/hooks';
-import { addMessage } from './lib/store/openApi';
+import { useAnalyzeRepository, useAppSelector } from '@/app/lib/hooks';
+import { GitHubUrlSchema } from './lib/schemas';
 
 
 export default function GitHubAnalyzer() {
   const [url, setUrl] = useState('');
-  const [loading, setLoading] = useState(false);
-  const dispatch = useAppDispatch();
-  const {message} = useAppSelector((state) => state.openApi); // Example selector
-  const analyzeRepository = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validate URL with Zod
-    const validationResult = GitHubUrlSchema.safeParse(url);
-    
-    if (!validationResult.success) {
-      alert(`Error de validación: ${validationResult.error.issues[0].message}`);
-      return;
-    }
-
-    setLoading(true);
-
+  const [isValidUrl, setIsValidUrl] = useState(false);
+  const { analyze, loading } = useAnalyzeRepository();
+  const { message } = useAppSelector((state) => state.openApi);
+ 
+  // Validate URL on change
+  const validateUrl = (value: string) => {
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url: validationResult.data }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Error al analizar el repositorio');
-      }
-
-      // Read the entire stream response
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      
-      if (!reader) {
-        throw new Error('No se pudo leer la respuesta');
-      }
-
-      let analysisText = '';
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        console.log('Raw chunk:', chunk);
-        
-        // For simple text stream, we can add directly
-        analysisText += chunk;
-      }
-      
-      dispatch(addMessage(analysisText));
-      alert(`Análisis del Repositorio:\n\n${analysisText}`);
-      
-    } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : 'Error desconocido'}`);
-    } finally {
-      setLoading(false);
+      GitHubUrlSchema.parse(value);
+      setIsValidUrl(true);
+    } catch {
+      setIsValidUrl(false);
     }
   };
 
@@ -84,7 +35,13 @@ export default function GitHubAnalyzer() {
         </div>
 
         <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-xl p-6 mb-8">
-          <form onSubmit={analyzeRepository} className="space-y-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              analyze(url);
+            }}
+            className="space-y-4"
+          >
             <div>
               <label htmlFor="github-url" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 URL del Repositorio de GitHub
@@ -93,7 +50,10 @@ export default function GitHubAnalyzer() {
                 id="github-url"
                 type="text"
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  validateUrl(e.target.value);
+                }}
                 placeholder="https://github.com/usuario/repositorio"
                 className="w-full px-4 py-3 border border-gray-300 dark:border-zinc-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-zinc-700 dark:text-white transition-colors"
                 disabled={loading}
@@ -102,7 +62,7 @@ export default function GitHubAnalyzer() {
 
             <button
               type="submit"
-              disabled={loading || !url.trim()}
+              disabled={loading || !url.trim() || !isValidUrl}
               className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               {loading ? (
