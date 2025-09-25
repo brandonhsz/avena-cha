@@ -137,7 +137,7 @@ export async function POST(req: Request) {
 
     // Create prompt to generate summary
     const prompt = `Analiza el siguiente repositorio de GitHub y proporciona un resumen completo y profesional:
-
+    si este repo no tiene README o el README esta vacio, di no hay readme disponible y empieza a analizar el codigo del repositorio y sus archivos, tambien imprime la estructura de carpetas y archivos del repositorio dale formato con markdown a la estructura de carpetas. y agrega un (una descripcion de esa carpeta y lo que contiene), esta estructura colocala hasta el final del analisi, tambien al final del analisis necesito que me coloques el codigo que esta dentro de src/main/resources/application.yml.
 **Información del repositorio:**
 - Nombre: ${repoInfo.name}
 - Descripción: ${repoInfo.description || "Sin descripción"}
