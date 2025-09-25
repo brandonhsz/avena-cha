@@ -1,13 +1,17 @@
 'use client';
 
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { GitHubUrlSchema } from '@/app/lib/schemas';
+import { useAppDispatch, useAppSelector } from '@/app/lib/hooks';
+import { addMessage } from './lib/store/openApi';
 
 
 export default function GitHubAnalyzer() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
-
+  const dispatch = useAppDispatch();
+  const {message} = useAppSelector((state) => state.openApi); // Example selector
   const analyzeRepository = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -57,11 +61,7 @@ export default function GitHubAnalyzer() {
         analysisText += chunk;
       }
       
-      // Show complete analysis in alert and console
-      console.log('*******************************');
-      console.log('COMPLETE ANALYSIS:');
-      console.log(analysisText);
-      console.log('*******************************');
+      dispatch(addMessage(analysisText));
       alert(`Análisis del Repositorio:\n\n${analysisText}`);
       
     } catch (err) {
@@ -116,6 +116,12 @@ export default function GitHubAnalyzer() {
             </button>
           </form>
         </div>
+        
+              {message && (
+                <ReactMarkdown>
+                  {message}
+                </ReactMarkdown>
+              )}
       </div>
     </div>
   );

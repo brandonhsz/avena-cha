@@ -14,7 +14,7 @@ export default function StoreProvider({
   if (!storeRef.current) {
     // Create the store instance the first time this renders
     storeRef.current = makeStore()
-    storeRef.current.dispatch(initializeMessageApi("Procesando..."))
+    // storeRef.current.dispatch(initializeMessageApi("Procesando..."))
   }
 
   return <Provider store={storeRef.current}>{children}</Provider>

@@ -1,8 +1,11 @@
 import { configureStore } from "@reduxjs/toolkit";
+import { openApiSlice } from "./openApi";
 
 export const makeStore = () => {
   return configureStore({
-    reducer: {},
+    reducer: {
+      openApi: openApiSlice.reducer,
+    },
   });
 };
 
