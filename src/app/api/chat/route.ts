@@ -1,6 +1,14 @@
 import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai";
 import { z } from "zod";
+import { createWriteStream } from "fs";
+import { mkdirSync, existsSync, readdirSync, statSync, readFileSync } from "fs";
+import { pipeline } from "stream";
+import { promisify } from "util";
+import AdmZip from "adm-zip";
+import path from "path";
+
+const streamPipeline = promisify(pipeline);
 
 export const maxDuration = 30;
 
@@ -118,13 +126,35 @@ async function getRepositoryInfo(githubUrl: string) {
   }
 }
 
+function getRepoStructureAndContent(dir: string, base = ""): string {
+  let result = "";
+  const items = readdirSync(dir);
+  for (const item of items) {
+    const fullPath = path.join(dir, item);
+    const relPath = path.join(base, item);
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      result += `\n📁 ${relPath}/\n`;
+      result += getRepoStructureAndContent(fullPath, relPath);
+    } else {
+      result += `\n📄 ${relPath}\n`;
+      try {
+        const content = readFileSync(fullPath, "utf8").substring(0, 2000);
+        result += `\`\`\`\n${content}\n\`\`\`\n`;
+      } catch {
+        result += "(No se pudo leer el archivo)\n";
+      }
+    }
+  }
+  return result;
+}
+
 export async function POST(req: Request) {
   try {
     const { url }: { url: string } = await req.json();
+    console.log("URL del repositorio recibida:", url);
 
-    // Validate URL with Zod
     const validationResult = GitHubUrlSchema.safeParse(url);
-
     if (!validationResult.success) {
       return Response.json(
         { error: validationResult.error.issues[0].message },
@@ -132,12 +162,43 @@ export async function POST(req: Request) {
       );
     }
 
-    // Get repository information
+    // Descargar el ZIP del repositorio y descomprimirlo
+    const repoUrl = new URL(validationResult.data);
     const repoInfo = await getRepositoryInfo(validationResult.data);
+
+    const [owner, repo] = repoUrl.pathname.split("/").filter(Boolean);
+
+    // Crear carpeta si no existe
+    if (!existsSync("repositorio")) {
+      mkdirSync("repositorio");
+    }
+
+    const branch = repoInfo.defaultBranch || "main";
+    const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+    const zipPath = "repositorio/repo.zip";
+
+    // Descargar el ZIP
+    const response = await fetch(zipUrl);
+    if (!response.ok) {
+      throw new Error("No se pudo descargar el ZIP del repositorio.");
+    }
+    const fileStream = createWriteStream(zipPath);
+    await streamPipeline(response.body, fileStream);
+
+    // Descomprimir el ZIP usando adm-zip
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo("repositorio", true);
+
+    console.log("Repositorio descargado y descomprimido en 'repositorio'");
+
+    // Obtener estructura y contenido del repositorio
+    const repoText = getRepoStructureAndContent("repositorio");
+
+    // Get repository information
 
     // Create prompt to generate summary
     const prompt = `Analiza el siguiente repositorio de GitHub y proporciona un resumen completo y profesional:
-
+    si este repo no tiene README o el README esta vacio, di no hay readme disponible y empieza a analizar el codigo del repositorio y sus archivos, tambien imprime la estructura de carpetas y archivos del repositorio dale formato con markdown a la estructura de carpetas. y agrega un (una descripcion de esa carpeta y lo que contiene), esta estructura colocala hasta el final del analisi, tambien al final del analisis necesito que me coloques el codigo que esta dentro de src/main/resources/application.yml.
 **Información del repositorio:**
 - Nombre: ${repoInfo.name}
 - Descripción: ${repoInfo.description || "Sin descripción"}
@@ -156,6 +217,9 @@ export async function POST(req: Request) {
 **README (primeros 2000 caracteres):**
 ${repoInfo.readme || "No hay README disponible"}
 
+**Estructura y contenido del repositorio:**  
+${repoText}
+
 Por favor, proporciona un análisis detallado que incluya:
 1. **Resumen general**: Qué hace este proyecto y cuál es su propósito
 2. **Tecnologías utilizadas**: Stack tecnológico principal
@@ -169,11 +233,6 @@ Sé conciso pero informativo, y enfócate en los aspectos más relevantes para u
     const result = streamText({
       model: openai("gpt-4o"),
       messages: [
-        {
-          role: "system",
-          content:
-            "Eres un experto analista de código y repositorios de GitHub. Tu trabajo es proporcionar análisis detallados y profesionales de repositorios, enfocándote en aspectos técnicos, calidad del código, arquitectura y utilidad práctica.",
-        },
         {
           role: "user",
           content: prompt,

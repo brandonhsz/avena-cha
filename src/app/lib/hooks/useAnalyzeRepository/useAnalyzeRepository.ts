@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { GitHubUrlSchema } from "../../schemas";
-import { addMessage } from "../../store/openApi";
+import { addMessage, resetMessage } from "../../store/openApi";
 
 // Define your action types
 const ANALYZE_REPOSITORY_REQUEST = "ANALYZE_REPOSITORY_REQUEST";
@@ -11,6 +11,7 @@ const ANALYZE_REPOSITORY_FAILURE = "ANALYZE_REPOSITORY_FAILURE";
 // Example action creator
 export const analyzeRepository = (repoUrl: string) => async (dispatch: any) => {
   dispatch({ type: ANALYZE_REPOSITORY_REQUEST });
+  dispatch(resetMessage());
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -44,9 +45,8 @@ export const analyzeRepository = (repoUrl: string) => async (dispatch: any) => {
 
       // For simple text stream, we can add directly
       analysisText += chunk;
+      dispatch(addMessage(chunk));
     }
-
-    dispatch(addMessage(analysisText));
   } catch (error) {
     dispatch({ type: ANALYZE_REPOSITORY_FAILURE, error });
   }
